@@ -17,6 +17,9 @@ export const ChatGPTDOMProfile: ProviderDOMProfile = {
       { type: 'testid', value: 'send-button' },
       { type: 'css', value: 'button[data-testid="send-button"]' },
       { type: 'xpath', value: '//button[@aria-label="Send message"]' },
+      { type: 'css', value: 'button[aria-label*="Send"]' },
+      { type: 'css', value: 'button svg' }, // Button with SVG icon
+      { type: 'xpath', value: '//button[contains(@class, "absolute")]' }, // Position-based fallback
     ],
   },
   lastAssistantMessage: {

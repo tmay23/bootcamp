@@ -47,11 +47,19 @@ export class ClaudeAgent extends BaseWebLLM {
         const currentContent = await messageLocator.textContent();
 
         if (currentContent) {
+          // Ignore if response is suspiciously short (likely error or loading)
+          if (currentContent.trim().length < 50) {
+            console.log(`⚠️ Response too short (${currentContent.trim().length} chars), waiting...`);
+            await this.page!.waitForTimeout(2000);
+            continue;
+          }
+
           if (currentContent === lastContent) {
             stableCount++;
           } else {
             stableCount = 0;
             lastContent = currentContent;
+            console.log(`📝 Content updated: ${currentContent.length} chars`);
           }
 
           // Response complete when not streaming and content stable

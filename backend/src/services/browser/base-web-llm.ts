@@ -62,8 +62,14 @@ export abstract class BaseWebLLM {
 
     this.page = await this.context.newPage();
 
-    // Navigate to provider
-    await this.page.goto(this.config.url, { waitUntil: 'networkidle' });
+    // Set longer timeout for slow sites
+    this.page.setDefaultTimeout(60000); // 60 seconds
+
+    // Navigate to provider with increased timeout
+    await this.page.goto(this.config.url, {
+      waitUntil: 'domcontentloaded', // Less strict than networkidle
+      timeout: 60000 // 60 seconds
+    });
 
     // Check session health
     const isHealthy = await this.checkSessionHealth();
@@ -204,14 +210,22 @@ export abstract class BaseWebLLM {
    * Send the message
    */
   protected async sendMessage(): Promise<void> {
+    // Try to find and click send button
     if (this.config.domProfile.sendButton) {
-      const sendBtn = await LocatorHelper.locate(
-        this.page!,
-        this.config.domProfile.sendButton
-      );
-      await sendBtn.click();
+      try {
+        const sendBtn = await LocatorHelper.locate(
+          this.page!,
+          this.config.domProfile.sendButton
+        );
+        await sendBtn.click();
+        console.log(`✅ Clicked send button`);
+      } catch (error) {
+        // Fallback: Press Enter if button not found
+        console.log(`⚠️ Send button not found, using Enter key`);
+        await this.page!.keyboard.press('Enter');
+      }
     } else {
-      // Fallback: Press Enter
+      // No send button defined, use Enter
       await this.page!.keyboard.press('Enter');
     }
 
