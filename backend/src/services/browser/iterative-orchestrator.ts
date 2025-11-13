@@ -1,7 +1,7 @@
 import { ChatGPTAgent } from './chatgpt-agent';
 import { ClaudeAgent } from './claude-agent';
 import { BaseWebLLM } from './base-web-llm';
-import { IterativeAnalyzer } from './iterative-analyzer';
+import { SmartAnalyzer } from './smart-analyzer';
 import {
   RunState,
   RoundState,
@@ -13,12 +13,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 export class IterativeOrchestrator {
   private agents: Map<string, BaseWebLLM> = new Map();
-  private analyzer: IterativeAnalyzer;
+  private analyzer: SmartAnalyzer | null = null;
   private initialized: boolean = false;
-
-  constructor() {
-    this.analyzer = new IterativeAnalyzer();
-  }
 
   /**
    * Initialize all available agents
@@ -75,6 +71,11 @@ export class IterativeOrchestrator {
     if (healthyAgents.length === 0) {
       throw new Error('No healthy agents available. Please check logins.');
     }
+
+    // Initialize smart analyzer using first healthy agent as meta-AI
+    const metaAI = healthyAgents[0];
+    this.analyzer = new SmartAnalyzer(metaAI);
+    console.log(`🧠 Using ${metaAI.getStatus().provider} as meta-AI for analysis\n`);
   }
 
   /**
@@ -129,12 +130,15 @@ export class IterativeOrchestrator {
           break;
         }
 
-        // Generate follow-up questions for next round
+        // Generate follow-up questions for next round using AI
         if (roundNum < config.maxRounds) {
-          const followUps = this.analyzer.generateFollowUpQuestions(roundState.analysis);
+          const followUps = await this.analyzer!.generateFollowUpQuestions(
+            roundState.analysis,
+            roundState.providerResults
+          );
 
           if (followUps.length > 0) {
-            console.log(`\n🔄 Generated ${followUps.length} follow-up questions`);
+            console.log(`\n🔄 Using follow-up: "${followUps[0].question}"`);
             roundState.followUpQuestions = followUps;
 
             // Use first follow-up for next round
@@ -149,8 +153,8 @@ export class IterativeOrchestrator {
 
     runState.completedAt = Date.now();
 
-    // Create final synthesis
-    const finalSynthesis = this.createFinalSynthesis(runState);
+    // Create final synthesis using AI
+    const finalSynthesis = await this.createFinalSynthesis(runState);
 
     console.log(`\n${'='.repeat(60)}`);
     console.log(`✅ Query complete in ${runState.rounds.length} rounds`);
@@ -222,12 +226,10 @@ export class IterativeOrchestrator {
     const results = await Promise.all(queryPromises);
     providerResults.push(...results);
 
-    // Analyze round
-    const previousAnalysis = roundNumber > 1 ? this.getLastRound()?.analysis : null;
+    // Analyze round using AI-powered smart analyzer
+    console.log(`\n🔍 Analyzing round ${roundNumber} with AI...`);
 
-    const analysis = previousAnalysis
-      ? this.analyzer.analyzeRound(roundNumber, providerResults, previousAnalysis)
-      : this.analyzer.analyzeRound1(providerResults);
+    const analysis = await this.analyzer!.analyzeRound1(providerResults);
 
     return {
       index: roundNumber,
@@ -238,9 +240,9 @@ export class IterativeOrchestrator {
   }
 
   /**
-   * Create final synthesis from all rounds
+   * Create final synthesis from all rounds using AI
    */
-  private createFinalSynthesis(runState: RunState): IterativeSynthesisResult {
+  private async createFinalSynthesis(runState: RunState): Promise<IterativeSynthesisResult> {
     const confidenceEvolution = runState.rounds.map((r) => r.analysis?.confidence || 0);
 
     // Collect all successful responses
@@ -248,8 +250,9 @@ export class IterativeOrchestrator {
       r.providerResults.filter((pr) => pr.status === 'ok' && pr.response)
     );
 
-    // Synthesize final answer
-    const synthesizedAnswer = this.synthesizeAnswer(runState.rounds);
+    // Synthesize final answer using AI
+    const allRoundResponses = runState.rounds.map((r) => r.providerResults);
+    const synthesizedAnswer = await this.analyzer!.synthesizeFinalAnswer(allRoundResponses);
 
     // Find resolved vs unresolved contradictions
     const allContradictions = runState.rounds.flatMap((r) => r.analysis?.contradictions || []);
