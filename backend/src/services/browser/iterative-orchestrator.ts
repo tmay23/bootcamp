@@ -171,7 +171,19 @@ export class IterativeOrchestrator {
       agent.getStatus().sessionHealthy
     );
 
-    console.log(`Querying ${healthyAgents.length} providers...`);
+    console.log(`\n📊 Round ${roundNumber}: Found ${healthyAgents.length}/${this.agents.size} healthy agents`);
+
+    // Log which agents are healthy vs unhealthy
+    for (const [name, agent] of this.agents.entries()) {
+      const status = agent.getStatus();
+      if (status.sessionHealthy) {
+        console.log(`   ✅ ${name}: Ready to query`);
+      } else {
+        console.log(`   ❌ ${name}: NOT healthy (status: ${status.status})`);
+      }
+    }
+
+    console.log(`\nQuerying ${healthyAgents.length} providers in parallel...`);
 
     const queryPromises = healthyAgents.map(async ([name, agent]) => {
       const startTime = Date.now();

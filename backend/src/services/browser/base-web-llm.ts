@@ -88,27 +88,44 @@ export abstract class BaseWebLLM {
    * Check if currently logged in
    */
   async checkSessionHealth(): Promise<boolean> {
-    if (!this.page) return false;
+    if (!this.page) {
+      console.log(`❌ ${this.config.name}: No page available for health check`);
+      return false;
+    }
 
     try {
+      console.log(`🔍 ${this.config.name}: Checking session health...`);
+
       // Check for login indicator (means NOT logged in)
       if (this.config.domProfile.loginIndicator) {
         const hasLoginPage = await LocatorHelper.exists(
           this.page,
           this.config.domProfile.loginIndicator
         );
-        if (hasLoginPage) return false;
+        if (hasLoginPage) {
+          console.log(`❌ ${this.config.name}: Login page detected - NOT logged in`);
+          return false;
+        } else {
+          console.log(`✅ ${this.config.name}: No login page detected`);
+        }
       }
 
       // Check for chat input (means logged in)
+      console.log(`🔍 ${this.config.name}: Looking for chat input...`);
       const hasChatInput = await LocatorHelper.exists(
         this.page,
         this.config.domProfile.chatInput
       );
 
+      if (hasChatInput) {
+        console.log(`✅ ${this.config.name}: Chat input found - session is HEALTHY`);
+      } else {
+        console.log(`❌ ${this.config.name}: Chat input NOT found - session unhealthy`);
+      }
+
       return hasChatInput;
     } catch (error) {
-      console.error(`Error checking session health:`, error);
+      console.error(`❌ ${this.config.name}: Error checking session health:`, error);
       return false;
     }
   }
@@ -158,18 +175,24 @@ export abstract class BaseWebLLM {
    * Send prompt and get response
    */
   async query(prompt: string): Promise<string> {
+    console.log(`\n📤 ${this.config.name}: Starting query...`);
+    console.log(`   Prompt: "${prompt.substring(0, 60)}..."`);
+
     if (!this.page) {
       throw new Error(`${this.config.name} not initialized`);
     }
 
     if (!this.status.sessionHealthy) {
+      console.log(`❌ ${this.config.name}: Cannot query - session not healthy!`);
       throw new Error(`${this.config.name} requires login`);
     }
 
     try {
+      console.log(`⌨️  ${this.config.name}: Typing prompt...`);
       // Type the prompt with human-like behavior
       await this.typeHumanLike(prompt);
 
+      console.log(`📨 ${this.config.name}: Sending message...`);
       // Send the message
       await this.sendMessage();
 
