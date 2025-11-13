@@ -2,6 +2,7 @@ import express, { Application } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import aiRoutes from './routes/ai.routes';
+import browserRoutes from './routes/browser.routes';
 
 // Load environment variables
 dotenv.config();
@@ -16,17 +17,28 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/ai', aiRoutes);
+app.use('/api/browser', browserRoutes);
 
 // Root route
 app.get('/', (req, res) => {
   res.json({
     message: 'Multi-AI Comparison Tool API',
-    version: '1.0.0',
+    version: '2.0.0 - Browser Automation Edition',
+    modes: {
+      api: 'Use API keys (original)',
+      browser: 'Use existing subscriptions (new!)',
+    },
     endpoints: {
-      health: '/api/ai/health',
-      query: 'POST /api/ai/query',
-      queryIterations: 'POST /api/ai/query-iterations',
-      providers: '/api/ai/providers',
+      // API mode
+      apiHealth: 'GET /api/ai/health',
+      apiQuery: 'POST /api/ai/query',
+      apiQueryIterations: 'POST /api/ai/query-iterations',
+      apiProviders: 'GET /api/ai/providers',
+      // Browser mode
+      browserHealth: 'GET /api/browser/health',
+      browserInitialize: 'POST /api/browser/initialize',
+      browserQuery: 'POST /api/browser/query-iterative',
+      browserStatus: 'GET /api/browser/agents/status',
     },
   });
 });
