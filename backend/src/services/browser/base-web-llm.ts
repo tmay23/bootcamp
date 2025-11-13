@@ -27,49 +27,89 @@ export abstract class BaseWebLLM {
   async initialize(): Promise<void> {
     console.log(`🚀 Initializing ${this.config.name}...`);
 
-    // Launch browser
-    this.browser = await chromium.launch({
+    // Create persistent user data directory for this provider
+    const userDataDir = path.join(process.cwd(), 'browser-profiles', this.config.name);
+
+    if (!fs.existsSync(userDataDir)) {
+      fs.mkdirSync(userDataDir, { recursive: true });
+      console.log(`📁 Created browser profile directory: ${userDataDir}`);
+    } else {
+      console.log(`📂 Using existing browser profile: ${userDataDir}`);
+    }
+
+    // Launch browser with persistent profile
+    // This saves EVERYTHING: cookies, cache, localStorage, IndexedDB, etc.
+    this.context = await chromium.launchPersistentContext(userDataDir, {
       headless: this.config.headless ?? false,
+      viewport: { width: 1920, height: 1080 },
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      locale: 'en-US',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-blink-features=AutomationControlled',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins,site-per-process',
       ],
+      // Additional anti-detection
+      ignoreDefaultArgs: ['--enable-automation'],
+      bypassCSP: true,
     });
 
-    // Try to load existing session
-    const sessionPath = SessionManager.getSessionPath(this.config.name);
-    const contextOptions: any = {
-      userAgent:
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      viewport: { width: 1920, height: 1080 },
-      locale: 'en-US',
-    };
-
-    if (fs.existsSync(sessionPath)) {
-      console.log(`📂 Loading existing session for ${this.config.name}`);
-      contextOptions.storageState = sessionPath;
-    }
-
-    this.context = await this.browser.newContext(contextOptions);
-
-    // Anti-detection: Add webdriver override
+    // Anti-detection: Add webdriver override to all new pages
     await this.context.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', {
         get: () => undefined,
       });
+
+      // Additional anti-detection
+      (window.navigator as any).chrome = {
+        runtime: {},
+      };
+
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+      });
+
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['en-US', 'en'],
+      });
     });
 
-    this.page = await this.context.newPage();
+    // Check if page already exists (persistent context might have pages from previous session)
+    const pages = this.context.pages();
+    if (pages.length > 0) {
+      console.log(`📄 Reusing existing page from persistent context`);
+      this.page = pages[0];
+
+      // Check current URL
+      const currentUrl = this.page.url();
+      console.log(`   Current URL: ${currentUrl}`);
+
+      // If we're already at the target URL (or a chat page), don't navigate
+      if (currentUrl.includes(new URL(this.config.url).hostname)) {
+        console.log(`   ✅ Already at ${this.config.name}, skipping navigation`);
+      } else {
+        console.log(`   🔄 Navigating to ${this.config.url}...`);
+        await this.page.goto(this.config.url, {
+          waitUntil: 'domcontentloaded',
+          timeout: 60000
+        });
+      }
+    } else {
+      console.log(`📄 Creating new page`);
+      this.page = await this.context.newPage();
+      await this.page.goto(this.config.url, {
+        waitUntil: 'domcontentloaded',
+        timeout: 60000
+      });
+    }
 
     // Set longer timeout for slow sites
     this.page.setDefaultTimeout(60000); // 60 seconds
 
-    // Navigate to provider with increased timeout
-    await this.page.goto(this.config.url, {
-      waitUntil: 'domcontentloaded', // Less strict than networkidle
-      timeout: 60000 // 60 seconds
-    });
+    // Wait a bit for page to stabilize
+    await this.page.waitForTimeout(2000);
 
     // Check session health
     const isHealthy = await this.checkSessionHealth();
@@ -145,9 +185,7 @@ export abstract class BaseWebLLM {
 
       if (isHealthy) {
         console.log(`✅ Login successful for ${this.config.name}!`);
-
-        // Save session
-        await this.saveSession();
+        console.log(`💾 Session automatically saved to persistent profile`);
 
         this.status.sessionHealthy = true;
         this.status.status = 'ok';
@@ -158,17 +196,6 @@ export abstract class BaseWebLLM {
     console.log(`❌ Login timeout for ${this.config.name}`);
     this.status.status = 'login_required';
     return false;
-  }
-
-  /**
-   * Save current session state
-   */
-  async saveSession(): Promise<void> {
-    if (!this.context) return;
-
-    const sessionPath = SessionManager.getSessionPath(this.config.name);
-    await this.context.storageState({ path: sessionPath });
-    console.log(`💾 Saved session for ${this.config.name}`);
   }
 
   /**
@@ -326,15 +353,20 @@ export abstract class BaseWebLLM {
   }
 
   /**
-   * Cleanup
+   * Cleanup - closes browser but session is auto-saved to persistent profile
    */
   async close(): Promise<void> {
+    console.log(`🛑 Closing ${this.config.name} browser...`);
+
     if (this.context) {
-      await this.saveSession();
+      // Persistent context auto-saves all data (cookies, localStorage, etc.)
       await this.context.close();
+      console.log(`✅ ${this.config.name} browser closed, session preserved in profile`);
     }
-    if (this.browser) {
-      await this.browser.close();
-    }
+
+    // No need to close browser separately - persistent context handles it
+    this.browser = null;
+    this.context = null;
+    this.page = null;
   }
 }

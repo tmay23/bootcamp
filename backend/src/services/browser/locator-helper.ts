@@ -4,25 +4,48 @@ import { LocatorSpec, LocatorStrategy } from '../../types/browser.types';
 export class LocatorHelper {
   /**
    * Tries multiple locator strategies in order until one succeeds
+   * Now with retry logic and better timeout handling
    */
-  static async locate(page: Page, spec: LocatorSpec): Promise<Locator> {
-    for (const strategy of spec.strategies) {
-      try {
-        const locator = await this.getLocatorByStrategy(page, strategy);
-        const count = await locator.count();
+  static async locate(page: Page, spec: LocatorSpec, retries: number = 3): Promise<Locator> {
+    let lastError: Error | null = null;
 
-        if (count > 0) {
-          console.log(`✅ Found element using ${strategy.type}: ${strategy.value}`);
-          return locator.first();
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      for (const strategy of spec.strategies) {
+        try {
+          const locator = await this.getLocatorByStrategy(page, strategy);
+
+          // Wait a bit for element to be in DOM
+          await page.waitForTimeout(500);
+
+          const count = await locator.count();
+
+          if (count > 0) {
+            // Verify element is actually interactable
+            const isVisible = await locator.first().isVisible().catch(() => false);
+
+            if (isVisible) {
+              console.log(`✅ Found element using ${strategy.type}: ${strategy.value.substring(0, 50)}`);
+              return locator.first();
+            }
+          }
+        } catch (error) {
+          lastError = error as Error;
+          // Strategy failed, try next one
+          continue;
         }
-      } catch (error) {
-        // Strategy failed, try next one
-        continue;
+      }
+
+      // If we're not on the last retry, wait before trying again
+      if (attempt < retries) {
+        console.log(`⚠️  Element not found (${spec.description}), retrying (${attempt}/${retries})...`);
+        await page.waitForTimeout(1000 * attempt); // Exponential backoff
       }
     }
 
-    // All strategies failed
-    throw new Error(`Cannot locate element: ${spec.description}. Tried ${spec.strategies.length} strategies.`);
+    // All strategies and retries failed
+    throw new Error(
+      `Cannot locate element: ${spec.description}. Tried ${spec.strategies.length} strategies with ${retries} retries. Last error: ${lastError?.message || 'Unknown'}`
+    );
   }
 
   private static async getLocatorByStrategy(
