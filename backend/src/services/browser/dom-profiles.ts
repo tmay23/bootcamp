@@ -61,24 +61,30 @@ export const ClaudeDOMProfile: ProviderDOMProfile = {
     description: 'Main chat input',
     strategies: [
       { type: 'css', value: '[contenteditable="true"][role="textbox"]' },
+      { type: 'css', value: 'div[contenteditable="true"]' },
       { type: 'css', value: '.ProseMirror' },
-      { type: 'xpath', value: '//div[@contenteditable="true"][@role="textbox"]' },
+      { type: 'css', value: 'fieldset div[contenteditable]' },
+      { type: 'xpath', value: '//div[@contenteditable="true"]' },
     ],
   },
   sendButton: {
     description: 'Send message button',
     strategies: [
       { type: 'css', value: 'button[aria-label*="Send"]' },
-      { type: 'css', value: 'button:has-text("Send")' },
-      { type: 'xpath', value: '//button[@aria-label="Send Message"]' },
+      { type: 'css', value: 'button svg' }, // Button with SVG
+      { type: 'xpath', value: '//button[@type="submit"]' },
+      { type: 'xpath', value: '//button[contains(@aria-label, "Send")]' },
+      { type: 'css', value: 'button[type="submit"]' },
     ],
   },
   lastAssistantMessage: {
     description: 'Last Claude response',
     strategies: [
-      { type: 'css', value: '[data-is-streaming="false"]:last-of-type .font-claude-message' },
-      { type: 'css', value: '.font-claude-message:last-of-type' },
-      { type: 'xpath', value: '(//div[contains(@class, "font-claude-message")])[last()]' },
+      { type: 'css', value: '[data-is-streaming="false"]:last-of-type' },
+      { type: 'css', value: 'div[class*="font-claude"]:last-of-type' },
+      { type: 'css', value: '[data-testid*="message"]:last-of-type' },
+      { type: 'xpath', value: '(//div[contains(@class, "font-claude")])[last()]' },
+      { type: 'xpath', value: '(//div[@data-is-streaming])[last()]' },
     ],
   },
   messageContainer: {

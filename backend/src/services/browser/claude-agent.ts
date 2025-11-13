@@ -7,7 +7,7 @@ export class ClaudeAgent extends BaseWebLLM {
   constructor(headless: boolean = false) {
     super({
       name: 'claude',
-      url: 'https://claude.ai/',
+      url: 'https://claude.ai/chats', // Start at chats page, not root
       sessionPath: 'claude.json',
       domProfile: ClaudeDOMProfile,
       headless,
