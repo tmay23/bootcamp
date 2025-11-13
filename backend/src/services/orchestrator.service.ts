@@ -49,6 +49,13 @@ export class OrchestratorService {
       queries.push(this.grokService.query(prompt));
     }
 
+    // Check if any providers are available
+    if (queries.length === 0) {
+      throw new Error(
+        'No AI providers are configured. Please add at least one API key to your .env file.'
+      );
+    }
+
     // Execute all queries in parallel
     const results = await Promise.all(queries);
 

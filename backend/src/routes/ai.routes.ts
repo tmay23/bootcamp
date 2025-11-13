@@ -61,8 +61,9 @@ router.post('/query-iterations', async (req: Request, res: Response) => {
     // Synthesize each iteration
     const syntheses = allIterations.map((iteration) => synthesizer.synthesize(iteration));
 
-    // Create final synthesis from all iterations
-    const finalSynthesis = this.synthesizeIterations(syntheses);
+    // Flatten all responses for final synthesis
+    const allResponses = allIterations.flat();
+    const finalSynthesis = synthesizer.synthesize(allResponses);
 
     res.json({
       iterations: syntheses,
