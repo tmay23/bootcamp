@@ -196,37 +196,64 @@ export abstract class BaseWebLLM {
     await input.click();
     await this.page!.waitForTimeout(this.randomDelay(300, 800));
 
-    for (const char of text) {
-      await input.type(char);
-      // Random typing speed: 50-200ms per character
-      await this.page!.waitForTimeout(this.randomDelay(50, 200));
+    // For contenteditable divs, use fill() for speed, then add natural delay
+    // For regular inputs, use character-by-character typing
+    try {
+      // Try fast fill first (works for contenteditable)
+      await input.fill(text);
+      await this.page!.waitForTimeout(this.randomDelay(500, 1500));
+    } catch (error) {
+      // Fallback: type character by character (for inputs/textareas)
+      for (const char of text) {
+        await input.type(char);
+        await this.page!.waitForTimeout(this.randomDelay(50, 200));
+      }
+      await this.page!.waitForTimeout(this.randomDelay(500, 1500));
     }
-
-    // Small pause after typing
-    await this.page!.waitForTimeout(this.randomDelay(500, 1500));
   }
 
   /**
    * Send the message
    */
   protected async sendMessage(): Promise<void> {
-    // Try to find and click send button
-    if (this.config.domProfile.sendButton) {
+    let sent = false;
+    let attempts = 0;
+    const maxAttempts = 3;
+
+    while (!sent && attempts < maxAttempts) {
+      attempts++;
       try {
-        const sendBtn = await LocatorHelper.locate(
-          this.page!,
-          this.config.domProfile.sendButton
-        );
-        await sendBtn.click();
-        console.log(`✅ Clicked send button`);
+        // Try to find and click send button
+        if (this.config.domProfile.sendButton) {
+          try {
+            const sendBtn = await LocatorHelper.locate(
+              this.page!,
+              this.config.domProfile.sendButton
+            );
+            await sendBtn.click();
+            console.log(`✅ Clicked send button`);
+            sent = true;
+          } catch (error) {
+            // Fallback: Press Enter if button not found
+            console.log(`⚠️ Send button not found (attempt ${attempts}/${maxAttempts}), using Enter key`);
+            await this.page!.keyboard.press('Enter');
+            sent = true;
+          }
+        } else {
+          // No send button defined, use Enter
+          await this.page!.keyboard.press('Enter');
+          sent = true;
+        }
       } catch (error) {
-        // Fallback: Press Enter if button not found
-        console.log(`⚠️ Send button not found, using Enter key`);
-        await this.page!.keyboard.press('Enter');
+        console.error(`❌ Send attempt ${attempts} failed:`, error);
+        if (attempts < maxAttempts) {
+          await this.page!.waitForTimeout(1000);
+        }
       }
-    } else {
-      // No send button defined, use Enter
-      await this.page!.keyboard.press('Enter');
+    }
+
+    if (!sent) {
+      throw new Error('Failed to send message after multiple attempts');
     }
 
     await this.page!.waitForTimeout(this.randomDelay(1000, 2000));
